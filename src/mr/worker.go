@@ -31,9 +31,13 @@ func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string) {
 	for {
 		// 1. 向coordinator请求任务
-		task := requestTask()
+		task, ok := requestTask()
+		if !ok {
+			// 请求失败，退出
+			return
+		}
 
-		switch task.taskType {
+		switch task.TaskType {
 		case Map:
 			performMapTask(task, mapf)
 			reportTask(task)
@@ -52,17 +56,17 @@ func Worker(mapf func(string, string) []KeyValue,
 
 // requestTask
 // 请求任务
-func requestTask() Task {
+func requestTask() (Task, bool) {
 	args := RequestTaskArg{}
 	reply := RequestTaskResponse{}
-	call("Coordinator.RequestTask", &args, &reply)
-	return reply.task
+	callRpcResult := call("Coordinator.RequestTask", &args, &reply)
+	return reply.Task, callRpcResult
 }
 
 // reportTask
 // 报告任务完成
 func reportTask(task Task) {
-	args := ReportTaskArg{task: task}
+	args := ReportTaskArg{Task: task}
 	reply := ReportTaskResponse{}
 
 	call("Coordinator.ReportTask", &args, &reply)
@@ -72,7 +76,8 @@ func reportTask(task Task) {
 // 执行Map任务
 func performMapTask(task Task, mapf func(string, string) []KeyValue) {
 	// 读取输入文件
-	filename := task.inputFiles[0]
+	log.Println("performMapTask", task.InputFiles)
+	filename := task.InputFiles[0]
 	content, err := ioutil.ReadFile(filename)
 	if err != nil {
 		log.Fatalf("cannot read %v", filename)
@@ -82,15 +87,15 @@ func performMapTask(task Task, mapf func(string, string) []KeyValue) {
 	kva := mapf(filename, string(content))
 
 	// 创建中间文件，按reduce任务分桶
-	buckets := make([][]KeyValue, task.reduceCount)
+	buckets := make([][]KeyValue, task.ReduceCount)
 	for _, kv := range kva {
-		bucket := ihash(kv.Key) % task.reduceCount
+		bucket := ihash(kv.Key) % task.ReduceCount
 		buckets[bucket] = append(buckets[bucket], kv)
 	}
 
 	// 将每个桶写入对应的中间文件
 	for i, bucket := range buckets {
-		filename := fmt.Sprintf("mr-%d-%d", task.taskId, i)
+		filename := fmt.Sprintf("mr-%d-%d", task.TaskId, i)
 		file, err := os.Create(filename)
 		if err != nil {
 			log.Fatalf("cannot create %v", filename)
@@ -112,8 +117,8 @@ func performReduceTask(task Task, reducef func(string, []string) string) {
 	// 读取所有相关的中间文件
 	var kva []KeyValue
 
-	for i := 0; i < task.mapCount; i++ {
-		filename := fmt.Sprintf("mr-%d-%d", i, task.taskId)
+	for i := 0; i < task.MapCount; i++ {
+		filename := fmt.Sprintf("mr-%d-%d", i, task.TaskId)
 		file, err := os.Open(filename)
 		if err != nil {
 			log.Fatalf("cannot open %v", filename)
@@ -136,7 +141,7 @@ func performReduceTask(task Task, reducef func(string, []string) string) {
 	})
 
 	// 创建输出文件
-	outputFile := fmt.Sprintf("mr-out-%d", task.taskId)
+	outputFile := fmt.Sprintf("mr-out-%d", task.TaskId)
 	file, err := os.Create(outputFile)
 	if err != nil {
 		log.Fatalf("cannot create %v", outputFile)
@@ -192,7 +197,8 @@ func call(rpcname string, args interface{}, reply interface{}) bool {
 	sockname := coordinatorSock()
 	c, err := rpc.DialHTTP("unix", sockname)
 	if err != nil {
-		log.Fatal("dialing:", err)
+		log.Println("call Rpc failed", err)
+		return false
 	}
 	defer c.Close()
 

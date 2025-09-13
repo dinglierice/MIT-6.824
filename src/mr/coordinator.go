@@ -27,16 +27,15 @@ const (
 	Done
 )
 
-// 定义基本的数据结构
+// 修复：所有字段首字母大写
 type Task struct {
-	taskType    TaskType
-	taskId      int
-	inputFiles  []string
-	taskStatus  TaskStatus
-	mapCount    int
-	reduceCount int
-
-	startTime time.Time
+	TaskType    TaskType   // 大写！
+	TaskId      int        // 大写！
+	InputFiles  []string   // 大写！
+	TaskStatus  TaskStatus // 大写！
+	MapCount    int        // 大写！
+	ReduceCount int        // 大写！
+	StartTime   time.Time  // 大写！
 }
 
 type Coordinator struct {
@@ -73,29 +72,29 @@ func (c *Coordinator) RequestTask(args *RequestTaskArg, reply *RequestTaskRespon
 
 	if c.phase == Map {
 		for i, task := range c.mapTasks {
-			if task.taskStatus == Unassigned {
-				c.mapTasks[i].taskStatus = InProgress
-				c.mapTasks[i].startTime = time.Now()
-				reply.task = task
+			if task.TaskStatus == Unassigned { // 使用大写字段名
+				c.mapTasks[i].TaskStatus = InProgress
+				c.mapTasks[i].StartTime = time.Now()
+				reply.Task = c.mapTasks[i] // 使用大写字段名
 				return nil
 			}
 		}
 		// 没有可用的Map任务，等待
-		reply.task = Task{taskType: Wait}
+		reply.Task = Task{TaskType: Wait} // 使用大写字段名
 	} else if c.phase == Reduce {
 		for i, task := range c.reduceTasks {
-			if task.taskStatus == Unassigned {
-				c.reduceTasks[i].taskStatus = InProgress
-				c.reduceTasks[i].startTime = time.Now()
-				reply.task = task
+			if task.TaskStatus == Unassigned {
+				c.reduceTasks[i].TaskStatus = InProgress
+				c.reduceTasks[i].StartTime = time.Now()
+				reply.Task = c.reduceTasks[i]
 				return nil
 			}
 		}
 		// 没有可用的Reduce任务，等待
-		reply.task = Task{taskType: Wait}
+		reply.Task = Task{TaskType: Wait}
 	} else {
 		// 所有任务完成，让worker退出
-		reply.task = Task{taskType: Done}
+		reply.Task = Task{TaskType: Done}
 	}
 
 	return nil
@@ -107,11 +106,11 @@ func (c *Coordinator) ReportTask(args *ReportTaskArg, reply *ReportTaskResponse)
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	task := args.task
-	if task.taskType == Map {
+	task := args.Task // 使用大写字段名
+	if task.TaskType == Map {
 		// 修改任务状态
-		if c.mapTasks[task.taskId].taskStatus == InProgress {
-			c.mapTasks[task.taskId].taskStatus = Finished
+		if c.mapTasks[task.TaskId].TaskStatus == InProgress {
+			c.mapTasks[task.TaskId].TaskStatus = Finished
 			c.mapFinished++
 
 			// 检查是否所有Map任务都完成
@@ -119,9 +118,9 @@ func (c *Coordinator) ReportTask(args *ReportTaskArg, reply *ReportTaskResponse)
 				c.phase = Reduce
 			}
 		}
-	} else if task.taskType == Reduce {
-		if c.reduceTasks[task.taskId].taskStatus == InProgress {
-			c.reduceTasks[task.taskId].taskStatus = Finished
+	} else if task.TaskType == Reduce {
+		if c.reduceTasks[task.TaskId].TaskStatus == InProgress {
+			c.reduceTasks[task.TaskId].TaskStatus = Finished
 			c.reduceFinished++
 
 			// 检查是否所有Reduce任务都完成
@@ -170,18 +169,18 @@ func (c *Coordinator) checkTimeout() {
 
 		if c.phase == Map {
 			for i, task := range c.mapTasks {
-				if task.taskStatus == InProgress {
+				if task.TaskStatus == InProgress {
 					// 超时的部分重置为未分配
-					if time.Since(task.startTime) > 10*time.Second {
-						c.mapTasks[i].taskStatus = Unassigned
+					if time.Since(task.StartTime) > 10*time.Second {
+						c.mapTasks[i].TaskStatus = Unassigned
 					}
 				}
 			}
 		} else if c.phase == Reduce {
 			for i, task := range c.reduceTasks {
-				if task.taskStatus == InProgress {
-					if time.Since(task.startTime) > 10*time.Second {
-						c.reduceTasks[i].taskStatus = Unassigned
+				if task.TaskStatus == InProgress {
+					if time.Since(task.StartTime) > 10*time.Second {
+						c.reduceTasks[i].TaskStatus = Unassigned
 					}
 				}
 			}
@@ -208,23 +207,23 @@ func MakeCoordinator(files []string, nReduce int) *Coordinator {
 	c.mapTasks = make([]Task, len(files))
 	for i, file := range files {
 		c.mapTasks[i] = Task{
-			taskType:    Map,
-			taskId:      i,
-			inputFiles:  []string{file},
-			reduceCount: nReduce,
-			mapCount:    len(files),
-			taskStatus:  Unassigned,
+			TaskType:    Map,
+			TaskId:      i,
+			InputFiles:  []string{file},
+			ReduceCount: nReduce,
+			MapCount:    len(files),
+			TaskStatus:  Unassigned,
 		}
 	}
 
 	c.reduceTasks = make([]Task, nReduce)
 	for i := 0; i < nReduce; i++ {
 		c.reduceTasks[i] = Task{
-			taskType:    Reduce,
-			taskId:      i,
-			reduceCount: nReduce,
-			mapCount:    len(files),
-			taskStatus:  Unassigned,
+			TaskType:    Reduce,
+			TaskId:      i,
+			ReduceCount: nReduce,
+			MapCount:    len(files),
+			TaskStatus:  Unassigned,
 		}
 	}
 	// 接受workers的信号，直到所有的map任务都完成

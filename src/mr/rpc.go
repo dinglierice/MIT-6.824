@@ -29,11 +29,11 @@ type RequestTaskArg struct {
 }
 
 type RequestTaskResponse struct {
-	task Task
+	Task Task
 }
 
 type ReportTaskArg struct {
-	task Task
+	Task Task
 }
 
 type ReportTaskResponse struct {
